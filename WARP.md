@@ -105,16 +105,22 @@ const CONFIG = {
   API_ENDPOINT: 'https://api.twitterapi.io/twitter/tweets',
   API_KEY: 'API_KEY',  // Consider moving to Script Properties
   BATCH_SIZE: 10,                   // URLs processed per batch (tune for performance)
-  MAX_RETRIES: 3,                   // Retry attempts for failed API calls
-  RETRY_DELAY_MS: 1000             // Base delay between retries (multiplied on each attempt)
+  MAX_RETRIES: 5,                   // Retry attempts for failed API calls
+  INITIAL_RETRY_DELAY_MS: 1000,     // Starting delay for exponential backoff
+  MAX_RETRY_DELAY_MS: 60000,        // Maximum delay between retries (1 minute)
+  API_CALL_DELAY_MS: 200,           // Delay between API calls (increase if rate limited)
+  RATE_LIMIT_PAUSE_MS: 30000        // Extended pause when rate limited (30 seconds)
 };
 ```
 
 ### Performance Tuning
 
 - **`BATCH_SIZE`**: Increase for faster processing, decrease if hitting timeout limits
-- **`MAX_RETRIES`**: Balance between reliability and execution time
-- **`RETRY_DELAY_MS`**: Adjust based on API rate limit behavior
+- **`MAX_RETRIES`**: Number of retry attempts (5 recommended for rate limits)
+- **`INITIAL_RETRY_DELAY_MS`**: Starting delay for exponential backoff
+- **`MAX_RETRY_DELAY_MS`**: Maximum delay to prevent excessive waiting
+- **`API_CALL_DELAY_MS`**: Base delay between calls (increase if frequently rate limited)
+- **`RATE_LIMIT_PAUSE_MS`**: Extended pause after multiple rate limits
 
 ## API Integration Details
 
@@ -142,9 +148,14 @@ const apiKey = scriptProperties.getProperty('TWITTER_API_KEY');
 
 ### Rate Limiting
 The script handles HTTP 429 (Too Many Requests) responses with:
-- Exponential backoff (delay increases with each retry)
-- 100ms pause between API calls
-- Batch processing to minimize total requests
+- Exponential backoff with jitter (randomized delays to prevent thundering herd)
+- Respects API rate limit headers (Retry-After, X-RateLimit-Reset)
+- Adaptive delays based on consecutive rate limits (200ms default, 400ms when limited)
+- Cooldown periods shared across API calls within a batch
+- Extended pause (30 seconds) after 3 consecutive rate limits
+- Automatic abort after 5 consecutive rate limits to prevent quota exhaustion
+- Batch processing with configurable pauses between batches
+- Resume capability for large datasets using Script Properties
 
 ## Required Permissions
 
