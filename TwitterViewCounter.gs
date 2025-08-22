@@ -17,8 +17,11 @@ const CONFIG = {
   API_ENDPOINT: 'https://api.twitterapi.io/twitter/tweets',
   API_KEY: 'API_KEY',
   BATCH_SIZE: 10, // Process URLs in batches to avoid timeout
-  MAX_RETRIES: 3,
-  RETRY_DELAY_MS: 1000
+  MAX_RETRIES: 5, // Increased for better rate limit handling
+  INITIAL_RETRY_DELAY_MS: 1000, // Starting delay for exponential backoff
+  MAX_RETRY_DELAY_MS: 60000, // Maximum delay (1 minute)
+  API_CALL_DELAY_MS: 200, // Delay between API calls to prevent rate limiting
+  RATE_LIMIT_PAUSE_MS: 30000 // Pause when rate limited (30 seconds)
 };
 
 // ==================== MAIN FUNCTION ====================
@@ -137,11 +140,23 @@ function extractTweetId(url) {
 
 // ==================== API INTEGRATION ====================
 /**
- * Fetches tweet data from the Twitter API
+ * Calculates exponential backoff delay
+ * @param {number} attempt - Current attempt number
+ * @returns {number} Delay in milliseconds
+ */
+function calculateBackoffDelay(attempt) {
+  const exponentialDelay = CONFIG.INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+  const jitteredDelay = exponentialDelay * (0.5 + Math.random() * 0.5); // Add jitter
+  return Math.min(jitteredDelay, CONFIG.MAX_RETRY_DELAY_MS);
+}
+
+/**
+ * Fetches tweet data from the Twitter API with enhanced rate limit handling
  * @param {string} tweetId - Tweet ID
+ * @param {Object} rateLimitState - Shared rate limit state
  * @returns {Object} API response with view count
  */
-function fetchTweetData(tweetId) {
+function fetchTweetData(tweetId, rateLimitState = {}) {
   const url = `${CONFIG.API_ENDPOINT}?tweet_ids=${tweetId}`;
   const options = {
     method: 'GET',
@@ -154,6 +169,13 @@ function fetchTweetData(tweetId) {
   let lastError;
   for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
     try {
+      // Check if we're in a rate limit cooldown period
+      if (rateLimitState.cooldownUntil && new Date() < rateLimitState.cooldownUntil) {
+        const waitTime = rateLimitState.cooldownUntil - new Date();
+        console.log(`Rate limit cooldown: waiting ${Math.round(waitTime/1000)}s...`);
+        Utilities.sleep(waitTime);
+      }
+      
       console.log(`Fetching data for tweet ${tweetId} (attempt ${attempt}/${CONFIG.MAX_RETRIES})...`);
       
       const response = UrlFetchApp.fetch(url, options);
@@ -164,6 +186,8 @@ function fetchTweetData(tweetId) {
         
         if (data.tweets && data.tweets.length > 0) {
           const tweet = data.tweets[0];
+          // Reset rate limit state on success
+          rateLimitState.consecutiveRateLimits = 0;
           return {
             success: true,
             viewCount: tweet.viewCount || 0,
@@ -173,9 +197,41 @@ function fetchTweetData(tweetId) {
           throw new Error('No tweet data in response');
         }
       } else if (responseCode === 429) {
-        // Rate limited
-        console.warn(`Rate limited for tweet ${tweetId}. Waiting...`);
-        Utilities.sleep(CONFIG.RETRY_DELAY_MS * attempt);
+        // Rate limited - implement exponential backoff
+        rateLimitState.consecutiveRateLimits = (rateLimitState.consecutiveRateLimits || 0) + 1;
+        
+        // Parse rate limit headers if available
+        const headers = response.getHeaders();
+        const resetTime = headers['X-RateLimit-Reset'] || headers['x-ratelimit-reset'];
+        const retryAfter = headers['Retry-After'] || headers['retry-after'];
+        
+        let delayMs;
+        if (retryAfter) {
+          delayMs = parseInt(retryAfter) * 1000;
+        } else if (resetTime) {
+          delayMs = Math.max(0, (parseInt(resetTime) * 1000) - Date.now());
+        } else {
+          delayMs = calculateBackoffDelay(attempt);
+        }
+        
+        // Set cooldown period
+        rateLimitState.cooldownUntil = new Date(Date.now() + delayMs);
+        
+        console.warn(`Rate limited (429) for tweet ${tweetId}. Waiting ${Math.round(delayMs/1000)}s...`);
+        console.log(`Consecutive rate limits: ${rateLimitState.consecutiveRateLimits}`);
+        
+        // If we're getting too many rate limits, pause longer
+        if (rateLimitState.consecutiveRateLimits >= 3) {
+          console.warn('Multiple consecutive rate limits detected. Extended pause...');
+          Utilities.sleep(CONFIG.RATE_LIMIT_PAUSE_MS);
+        } else {
+          Utilities.sleep(delayMs);
+        }
+      } else if (responseCode === 503) {
+        // Service unavailable - retry with backoff
+        const delay = calculateBackoffDelay(attempt);
+        console.warn(`Service unavailable (503). Retrying in ${Math.round(delay/1000)}s...`);
+        Utilities.sleep(delay);
       } else {
         throw new Error(`API returned status ${responseCode}: ${response.getContentText()}`);
       }
@@ -185,7 +241,9 @@ function fetchTweetData(tweetId) {
       console.error(`Error fetching tweet ${tweetId}: ${error.message}`);
       
       if (attempt < CONFIG.MAX_RETRIES) {
-        Utilities.sleep(CONFIG.RETRY_DELAY_MS);
+        const delay = calculateBackoffDelay(attempt);
+        console.log(`Retrying in ${Math.round(delay/1000)}s...`);
+        Utilities.sleep(delay);
       }
     }
   }
@@ -193,49 +251,163 @@ function fetchTweetData(tweetId) {
   return {
     success: false,
     error: lastError ? lastError.message : 'Unknown error',
-    tweetId: tweetId
+    tweetId: tweetId,
+    rateLimited: rateLimitState.consecutiveRateLimits > 0
   };
 }
 
 // ==================== URL PROCESSING ====================
 /**
- * Processes all URLs and fetches their view counts
+ * Processes URLs in batches with rate limit awareness
  * @param {Array<{row: number, url: string}>} urlData - URLs to process
  * @returns {Array} Processing results
  */
 function processUrls(urlData) {
   const results = [];
+  const rateLimitState = {
+    consecutiveRateLimits: 0,
+    cooldownUntil: null
+  };
   
-  for (let i = 0; i < urlData.length; i++) {
-    const { row, url } = urlData[i];
+  // Process in batches to manage rate limits and execution time
+  const totalBatches = Math.ceil(urlData.length / CONFIG.BATCH_SIZE);
+  
+  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    const start = batchIndex * CONFIG.BATCH_SIZE;
+    const end = Math.min(start + CONFIG.BATCH_SIZE, urlData.length);
+    const batch = urlData.slice(start, end);
     
-    // Extract tweet ID
-    const tweetId = extractTweetId(url);
+    console.log(`Processing batch ${batchIndex + 1}/${totalBatches} (URLs ${start + 1}-${end} of ${urlData.length})`);
     
-    if (!tweetId) {
+    for (let i = 0; i < batch.length; i++) {
+      const { row, url } = batch[i];
+      
+      // Extract tweet ID
+      const tweetId = extractTweetId(url);
+      
+      if (!tweetId) {
+        results.push({
+          row: row,
+          success: false,
+          error: 'Could not extract tweet ID',
+          url: url
+        });
+        continue;
+      }
+      
+      // Fetch tweet data from API with rate limit state
+      const apiResult = fetchTweetData(tweetId, rateLimitState);
+      
       results.push({
         row: row,
-        success: false,
-        error: 'Could not extract tweet ID',
-        url: url
+        url: url,
+        tweetId: tweetId,
+        ...apiResult
       });
-      continue;
+      
+      // Adaptive delay between API calls
+      if (i < batch.length - 1) {
+        // Increase delay if we're experiencing rate limits
+        const delay = rateLimitState.consecutiveRateLimits > 0 
+          ? CONFIG.API_CALL_DELAY_MS * 2 
+          : CONFIG.API_CALL_DELAY_MS;
+        Utilities.sleep(delay);
+      }
+      
+      // Check if we should abort due to excessive rate limiting
+      if (rateLimitState.consecutiveRateLimits >= 5) {
+        console.error('Excessive rate limiting detected. Aborting remaining URLs.');
+        // Add remaining URLs as failed
+        for (let j = i + 1; j < batch.length; j++) {
+          results.push({
+            row: batch[j].row,
+            url: batch[j].url,
+            success: false,
+            error: 'Skipped due to rate limiting',
+            rateLimited: true
+          });
+        }
+        break;
+      }
     }
     
-    // Fetch tweet data from API
-    const apiResult = fetchTweetData(tweetId);
-    
-    results.push({
-      row: row,
-      url: url,
-      tweetId: tweetId,
-      ...apiResult
-    });
-    
-    // Brief pause between API calls to avoid rate limiting
-    if (i < urlData.length - 1) {
-      Utilities.sleep(100);
+    // Pause between batches
+    if (batchIndex < totalBatches - 1) {
+      const pauseTime = rateLimitState.consecutiveRateLimits > 0 ? 5000 : 1000;
+      console.log(`Pausing ${pauseTime/1000}s between batches...`);
+      Utilities.sleep(pauseTime);
     }
+  }
+  
+  return results;
+}
+
+/**
+ * Processes URLs with resume capability for large datasets
+ * @param {Array<{row: number, url: string}>} urlData - URLs to process
+ * @param {number} startIndex - Index to start processing from (for resume)
+ * @returns {Array} Processing results
+ */
+function processUrlsWithResume(urlData, startIndex = 0) {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const resumeIndex = startIndex || parseInt(scriptProperties.getProperty('RESUME_INDEX') || '0');
+  
+  if (resumeIndex > 0) {
+    console.log(`Resuming from index ${resumeIndex}`);
+  }
+  
+  const results = [];
+  const rateLimitState = {
+    consecutiveRateLimits: 0,
+    cooldownUntil: null
+  };
+  
+  try {
+    for (let i = resumeIndex; i < urlData.length; i++) {
+      const { row, url } = urlData[i];
+      
+      // Save progress periodically
+      if (i % 10 === 0) {
+        scriptProperties.setProperty('RESUME_INDEX', i.toString());
+      }
+      
+      // Process URL (same logic as before)
+      const tweetId = extractTweetId(url);
+      
+      if (!tweetId) {
+        results.push({
+          row: row,
+          success: false,
+          error: 'Could not extract tweet ID',
+          url: url
+        });
+        continue;
+      }
+      
+      const apiResult = fetchTweetData(tweetId, rateLimitState);
+      
+      results.push({
+        row: row,
+        url: url,
+        tweetId: tweetId,
+        ...apiResult
+      });
+      
+      // Adaptive delay
+      if (i < urlData.length - 1) {
+        const delay = rateLimitState.consecutiveRateLimits > 0 
+          ? CONFIG.API_CALL_DELAY_MS * 2 
+          : CONFIG.API_CALL_DELAY_MS;
+        Utilities.sleep(delay);
+      }
+    }
+    
+    // Clear resume index on successful completion
+    scriptProperties.deleteProperty('RESUME_INDEX');
+    
+  } catch (error) {
+    console.error(`Processing interrupted at index ${results.length}: ${error.message}`);
+    // Resume index is already saved
   }
   
   return results;
@@ -297,6 +469,7 @@ function columnLetterToNumber(letter) {
 function logSummary(results, duration) {
   const successful = results.filter(r => r.success).length;
   const failed = results.filter(r => !r.success).length;
+  const rateLimited = results.filter(r => r.rateLimited).length;
   
   const summary = `
 ========================================
@@ -305,7 +478,9 @@ Twitter View Count Update Summary
 Total URLs processed: ${results.length}
 Successful: ${successful}
 Failed: ${failed}
+Rate Limited: ${rateLimited}
 Duration: ${duration.toFixed(2)} seconds
+Avg time per URL: ${(duration / results.length).toFixed(2)} seconds
 ========================================`;
   
   console.log(summary);
@@ -313,9 +488,39 @@ Duration: ${duration.toFixed(2)} seconds
   // Log failures for debugging
   if (failed > 0) {
     console.log('\nFailed URLs:');
-    results.filter(r => !r.success).forEach(r => {
-      console.log(`Row ${r.row}: ${r.url} - Error: ${r.error}`);
+    const failures = results.filter(r => !r.success);
+    
+    // Group failures by error type
+    const errorGroups = {};
+    failures.forEach(r => {
+      const errorKey = r.error || 'Unknown error';
+      if (!errorGroups[errorKey]) {
+        errorGroups[errorKey] = [];
+      }
+      errorGroups[errorKey].push(r);
     });
+    
+    // Log grouped errors
+    Object.keys(errorGroups).forEach(errorType => {
+      console.log(`\n  ${errorType} (${errorGroups[errorType].length} URLs):`);
+      errorGroups[errorType].slice(0, 5).forEach(r => {
+        console.log(`    Row ${r.row}: ${r.url}`);
+      });
+      if (errorGroups[errorType].length > 5) {
+        console.log(`    ... and ${errorGroups[errorType].length - 5} more`);
+      }
+    });
+  }
+  
+  // Provide recommendations based on results
+  if (rateLimited > 0) {
+    console.log('\n⚠️ Rate Limiting Detected:');
+    console.log('Consider reducing BATCH_SIZE or increasing API_CALL_DELAY_MS in CONFIG.');
+  }
+  
+  if (duration > 300) { // More than 5 minutes
+    console.log('\n⏰ Long Execution Time:');
+    console.log('Consider processing URLs in smaller batches or using time-based triggers.');
   }
 }
 
