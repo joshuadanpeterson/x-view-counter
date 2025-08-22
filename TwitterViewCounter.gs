@@ -395,6 +395,7 @@ function processUrls(urlData) {
         }
         
         return results; // Exit early
+      }
     }
     
     // Pause between batches - always use longer pause to prevent rate limiting
