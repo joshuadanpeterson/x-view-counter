@@ -16,12 +16,13 @@ const CONFIG = {
   START_ROW: 2,
   API_ENDPOINT: 'https://api.twitterapi.io/twitter/tweets',
   API_KEY: 'API_KEY',
-  BATCH_SIZE: 10, // Process URLs in batches to avoid timeout
-  MAX_RETRIES: 5, // Increased for better rate limit handling
-  INITIAL_RETRY_DELAY_MS: 1000, // Starting delay for exponential backoff
+  BATCH_SIZE: 5, // Reduced batch size to avoid timeout
+  MAX_RETRIES: 3, // Reduced retries to save time
+  INITIAL_RETRY_DELAY_MS: 2000, // Increased initial delay
   MAX_RETRY_DELAY_MS: 60000, // Maximum delay (1 minute)
-  API_CALL_DELAY_MS: 200, // Delay between API calls to prevent rate limiting
-  RATE_LIMIT_PAUSE_MS: 30000 // Pause when rate limited (30 seconds)
+  API_CALL_DELAY_MS: 1000, // Increased delay between calls (1 second)
+  RATE_LIMIT_PAUSE_MS: 60000, // Longer pause when rate limited (1 minute)
+  MAX_URLS_PER_EXECUTION: 20 // Limit URLs per execution to avoid timeout
 };
 
 // ==================== MAIN FUNCTION ====================
@@ -42,12 +43,50 @@ function updateTwitterViewCounts() {
       throw new Error(`Sheet "${CONFIG.SHEET_NAME}" not found`);
     }
     
+    // Check if we're resuming from a previous execution
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const lastProcessedRow = parseInt(scriptProperties.getProperty('LAST_PROCESSED_ROW') || '0');
+    
     // Scan for Twitter URLs and process them
-    const urlData = scanForTwitterUrls(sheet);
-    const results = processUrls(urlData);
+    const allUrlData = scanForTwitterUrls(sheet);
+    
+    // Filter URLs based on last processed row
+    const urlData = lastProcessedRow > 0 
+      ? allUrlData.filter(item => item.row > lastProcessedRow)
+      : allUrlData;
+    
+    // Limit URLs to process in this execution
+    const urlsToProcess = urlData.slice(0, CONFIG.MAX_URLS_PER_EXECUTION);
+    
+    if (urlsToProcess.length === 0) {
+      console.log('No URLs to process. All URLs have been processed.');
+      scriptProperties.deleteProperty('LAST_PROCESSED_ROW');
+      return;
+    }
+    
+    console.log(`Processing ${urlsToProcess.length} of ${urlData.length} remaining URLs...`);
+    if (urlData.length > CONFIG.MAX_URLS_PER_EXECUTION) {
+      console.log(`Will process remaining ${urlData.length - CONFIG.MAX_URLS_PER_EXECUTION} URLs in next execution.`);
+    }
+    
+    const results = processUrls(urlsToProcess);
     
     // Update the spreadsheet with view counts
     updateSpreadsheet(sheet, results);
+    
+    // Save progress
+    if (urlsToProcess.length > 0) {
+      const lastRow = Math.max(...urlsToProcess.map(u => u.row));
+      scriptProperties.setProperty('LAST_PROCESSED_ROW', lastRow.toString());
+      
+      if (urlData.length > CONFIG.MAX_URLS_PER_EXECUTION) {
+        console.log(`Progress saved. Last processed row: ${lastRow}`);
+        console.log('Run the script again to continue processing remaining URLs.');
+      } else {
+        // All URLs processed, clear the progress
+        scriptProperties.deleteProperty('LAST_PROCESSED_ROW');
+      }
+    }
     
     // Log summary
     const endTime = new Date();
@@ -211,8 +250,12 @@ function fetchTweetData(tweetId, rateLimitState = {}) {
         } else if (resetTime) {
           delayMs = Math.max(0, (parseInt(resetTime) * 1000) - Date.now());
         } else {
-          delayMs = calculateBackoffDelay(attempt);
+          // Use longer delays for rate limits
+          delayMs = CONFIG.INITIAL_RETRY_DELAY_MS * Math.pow(2, rateLimitState.consecutiveRateLimits);
         }
+        
+        // Cap the delay
+        delayMs = Math.min(delayMs, CONFIG.MAX_RETRY_DELAY_MS);
         
         // Set cooldown period
         rateLimitState.cooldownUntil = new Date(Date.now() + delayMs);
@@ -220,13 +263,18 @@ function fetchTweetData(tweetId, rateLimitState = {}) {
         console.warn(`Rate limited (429) for tweet ${tweetId}. Waiting ${Math.round(delayMs/1000)}s...`);
         console.log(`Consecutive rate limits: ${rateLimitState.consecutiveRateLimits}`);
         
-        // If we're getting too many rate limits, pause longer
-        if (rateLimitState.consecutiveRateLimits >= 3) {
-          console.warn('Multiple consecutive rate limits detected. Extended pause...');
-          Utilities.sleep(CONFIG.RATE_LIMIT_PAUSE_MS);
-        } else {
-          Utilities.sleep(delayMs);
+        // If we're getting too many rate limits, return early to save time
+        if (rateLimitState.consecutiveRateLimits >= 2) {
+          console.warn('Multiple rate limits detected. Skipping further retries for this tweet.');
+          return {
+            success: false,
+            error: 'Rate limited - skipped after multiple attempts',
+            tweetId: tweetId,
+            rateLimited: true
+          };
         }
+        
+        Utilities.sleep(delayMs);
       } else if (responseCode === 503) {
         // Service unavailable - retry with backoff
         const delay = calculateBackoffDelay(attempt);
@@ -307,33 +355,51 @@ function processUrls(urlData) {
       
       // Adaptive delay between API calls
       if (i < batch.length - 1) {
-        // Increase delay if we're experiencing rate limits
-        const delay = rateLimitState.consecutiveRateLimits > 0 
-          ? CONFIG.API_CALL_DELAY_MS * 2 
-          : CONFIG.API_CALL_DELAY_MS;
-        Utilities.sleep(delay);
+        // Always use the configured delay to prevent rate limiting
+        Utilities.sleep(CONFIG.API_CALL_DELAY_MS);
       }
       
       // Check if we should abort due to excessive rate limiting
-      if (rateLimitState.consecutiveRateLimits >= 5) {
-        console.error('Excessive rate limiting detected. Aborting remaining URLs.');
-        // Add remaining URLs as failed
+      if (rateLimitState.consecutiveRateLimits >= 3) {
+        console.error('Rate limiting detected. Stopping to prevent further issues.');
+        // Save progress and stop
+        const scriptProperties = PropertiesService.getScriptProperties();
+        if (batch[i].row) {
+          scriptProperties.setProperty('LAST_PROCESSED_ROW', batch[i].row.toString());
+        }
+        
+        // Add remaining URLs as skipped
         for (let j = i + 1; j < batch.length; j++) {
           results.push({
             row: batch[j].row,
             url: batch[j].url,
             success: false,
-            error: 'Skipped due to rate limiting',
+            error: 'Skipped - will retry in next execution',
             rateLimited: true
           });
         }
-        break;
-      }
+        
+        // Add remaining batches as skipped
+        for (let k = batchIndex + 1; k < totalBatches; k++) {
+          const remainingStart = k * CONFIG.BATCH_SIZE;
+          const remainingEnd = Math.min(remainingStart + CONFIG.BATCH_SIZE, urlData.length);
+          for (let l = remainingStart; l < remainingEnd; l++) {
+            results.push({
+              row: urlData[l].row,
+              url: urlData[l].url,
+              success: false,
+              error: 'Skipped - will retry in next execution',
+              rateLimited: true
+            });
+          }
+        }
+        
+        return results; // Exit early
     }
     
-    // Pause between batches
+    // Pause between batches - always use longer pause to prevent rate limiting
     if (batchIndex < totalBatches - 1) {
-      const pauseTime = rateLimitState.consecutiveRateLimits > 0 ? 5000 : 1000;
+      const pauseTime = 2000; // Always 2 seconds between batches
       console.log(`Pausing ${pauseTime/1000}s between batches...`);
       Utilities.sleep(pauseTime);
     }
@@ -524,6 +590,46 @@ Avg time per URL: ${(duration / results.length).toFixed(2)} seconds
   }
 }
 
+// ==================== HELPER FUNCTIONS ====================
+/**
+ * Clears the saved progress and starts fresh
+ */
+function clearProgress() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  scriptProperties.deleteProperty('LAST_PROCESSED_ROW');
+  scriptProperties.deleteProperty('RESUME_INDEX');
+  console.log('Progress cleared. Next execution will start from the beginning.');
+  SpreadsheetApp.getUi().alert('Progress cleared. Next execution will start from the beginning.');
+}
+
+/**
+ * Continues processing from where the last execution left off
+ */
+function continueProcessing() {
+  updateTwitterViewCounts();
+}
+
+/**
+ * Gets the current processing status
+ */
+function getProcessingStatus() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const lastProcessedRow = scriptProperties.getProperty('LAST_PROCESSED_ROW');
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  const allUrls = scanForTwitterUrls(sheet);
+  
+  if (!lastProcessedRow) {
+    SpreadsheetApp.getUi().alert(`No saved progress. Total URLs to process: ${allUrls.length}`);
+  } else {
+    const remaining = allUrls.filter(item => item.row > parseInt(lastProcessedRow)).length;
+    SpreadsheetApp.getUi().alert(
+      `Last processed row: ${lastProcessedRow}\n` +
+      `Remaining URLs: ${remaining} of ${allUrls.length}\n` +
+      `Progress: ${Math.round(((allUrls.length - remaining) / allUrls.length) * 100)}%`
+    );
+  }
+}
+
 // ==================== MENU INTEGRATION ====================
 /**
  * Creates a custom menu when the spreadsheet is opened
@@ -531,8 +637,12 @@ Avg time per URL: ${(duration / results.length).toFixed(2)} seconds
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Twitter Tools')
-    .addItem('Update View Counts', 'updateTwitterViewCounts')
-    .addItem('Update View Counts (Selected Range)', 'updateSelectedRange')
+    .addItem('Update View Counts (Process 20)', 'updateTwitterViewCounts')
+    .addItem('Continue Processing', 'continueProcessing')
+    .addItem('Update Selected Range', 'updateSelectedRange')
+    .addSeparator()
+    .addItem('Check Status', 'getProcessingStatus')
+    .addItem('Clear Progress', 'clearProgress')
     .addSeparator()
     .addItem('Settings', 'showSettings')
     .addToUi();
