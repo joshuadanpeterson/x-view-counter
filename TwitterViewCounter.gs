@@ -27,6 +27,95 @@ const CONFIG = {
 
 // ==================== MAIN FUNCTION ====================
 /**
+ * Main function to update Twitter view counts for July 2025 sheet
+ * Processes column D and outputs to column E
+ */
+function updateJuly2025ViewCounts() {
+  const startTime = new Date();
+  console.log(`[${startTime.toISOString()}] Starting Twitter view count update for July 2025...`);
+  
+  // Create a custom config for July 2025
+  const JULY_CONFIG = {
+    ...CONFIG,
+    SHEET_NAME: 'July 2025',
+    URL_COLUMN: 'D',
+    VIEW_COUNT_COLUMN: 'E',
+    START_ROW: 2
+  };
+  
+  try {
+    // Get the active spreadsheet and target sheet
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = spreadsheet.getSheetByName(JULY_CONFIG.SHEET_NAME);
+    
+    if (!sheet) {
+      throw new Error(`Sheet "${JULY_CONFIG.SHEET_NAME}" not found`);
+    }
+    
+    // Check if we're resuming from a previous execution
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const lastProcessedRow = parseInt(scriptProperties.getProperty('JULY_LAST_PROCESSED_ROW') || '0');
+    
+    // Scan for Twitter URLs and process them
+    const allUrlData = scanForTwitterUrlsInSheet(sheet, JULY_CONFIG);
+    
+    // Filter URLs based on last processed row
+    const urlData = lastProcessedRow > 0 
+      ? allUrlData.filter(item => item.row > lastProcessedRow)
+      : allUrlData;
+    
+    // Limit URLs to process in this execution
+    const urlsToProcess = urlData.slice(0, JULY_CONFIG.MAX_URLS_PER_EXECUTION);
+    
+    if (urlsToProcess.length === 0) {
+      console.log('No URLs to process. All URLs have been processed.');
+      scriptProperties.deleteProperty('JULY_LAST_PROCESSED_ROW');
+      SpreadsheetApp.getUi().alert('July 2025: All URLs have been processed!');
+      return;
+    }
+    
+    console.log(`July 2025: Processing ${urlsToProcess.length} of ${urlData.length} remaining URLs...`);
+    if (urlData.length > JULY_CONFIG.MAX_URLS_PER_EXECUTION) {
+      console.log(`Will process remaining ${urlData.length - JULY_CONFIG.MAX_URLS_PER_EXECUTION} URLs in next execution.`);
+    }
+    
+    const results = processUrls(urlsToProcess);
+    
+    // Update the spreadsheet with view counts
+    updateSpreadsheetWithConfig(sheet, results, JULY_CONFIG);
+    
+    // Save progress
+    if (urlsToProcess.length > 0) {
+      const lastRow = Math.max(...urlsToProcess.map(u => u.row));
+      scriptProperties.setProperty('JULY_LAST_PROCESSED_ROW', lastRow.toString());
+      
+      if (urlData.length > JULY_CONFIG.MAX_URLS_PER_EXECUTION) {
+        console.log(`Progress saved. Last processed row: ${lastRow}`);
+        console.log('Run the script again to continue processing remaining URLs.');
+        SpreadsheetApp.getUi().alert(
+          `July 2025: Processed ${urlsToProcess.length} URLs.\n` +
+          `${urlData.length - JULY_CONFIG.MAX_URLS_PER_EXECUTION} URLs remaining.\n` +
+          `Use "Continue July Processing" to continue.`
+        );
+      } else {
+        // All URLs processed, clear the progress
+        scriptProperties.deleteProperty('JULY_LAST_PROCESSED_ROW');
+        SpreadsheetApp.getUi().alert(`July 2025: Successfully processed all ${urlsToProcess.length} URLs!`);
+      }
+    }
+    
+    // Log summary
+    const endTime = new Date();
+    const duration = (endTime - startTime) / 1000;
+    logSummary(results, duration);
+    
+  } catch (error) {
+    console.error(`Fatal error in updateJuly2025ViewCounts: ${error.message}`);
+    SpreadsheetApp.getUi().alert(`Error processing July 2025: ${error.message}`);
+  }
+}
+
+/**
  * Main function to update Twitter view counts in the spreadsheet
  * This function orchestrates the entire process
  */
@@ -106,20 +195,30 @@ function updateTwitterViewCounts() {
  * @returns {Array<{row: number, url: string}>} Array of URL data
  */
 function scanForTwitterUrls(sheet) {
-  console.log(`Scanning column ${CONFIG.URL_COLUMN} for Twitter URLs...`);
+  return scanForTwitterUrlsInSheet(sheet, CONFIG);
+}
+
+/**
+ * Scans the sheet for Twitter/X.com URLs with custom config
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet to scan
+ * @param {Object} config - Configuration object
+ * @returns {Array<{row: number, url: string}>} Array of URL data
+ */
+function scanForTwitterUrlsInSheet(sheet, config) {
+  console.log(`Scanning column ${config.URL_COLUMN} for Twitter URLs...`);
   
   // Get the last row with data
   const lastRow = sheet.getLastRow();
-  if (lastRow < CONFIG.START_ROW) {
+  if (lastRow < config.START_ROW) {
     console.log('No data rows found');
     return [];
   }
   
   // Get the range of URLs
   const range = sheet.getRange(
-    CONFIG.START_ROW, 
-    columnLetterToNumber(CONFIG.URL_COLUMN), 
-    lastRow - CONFIG.START_ROW + 1, 
+    config.START_ROW, 
+    columnLetterToNumber(config.URL_COLUMN), 
+    lastRow - config.START_ROW + 1, 
     1
   );
   const values = range.getValues();
@@ -130,7 +229,7 @@ function scanForTwitterUrls(sheet) {
     const cellValue = values[i][0];
     if (cellValue && isTwitterUrl(cellValue)) {
       urlData.push({
-        row: CONFIG.START_ROW + i,
+        row: config.START_ROW + i,
         url: cellValue.toString().trim()
       });
     }
@@ -487,10 +586,20 @@ function processUrlsWithResume(urlData, startIndex = 0) {
  * @param {Array} results - Processing results
  */
 function updateSpreadsheet(sheet, results) {
+  updateSpreadsheetWithConfig(sheet, results, CONFIG);
+}
+
+/**
+ * Updates the spreadsheet with view counts using custom config
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - Target sheet
+ * @param {Array} results - Processing results
+ * @param {Object} config - Configuration object
+ */
+function updateSpreadsheetWithConfig(sheet, results, config) {
   console.log('Updating spreadsheet with view counts...');
   
   const updates = [];
-  const viewCountColumn = columnLetterToNumber(CONFIG.VIEW_COUNT_COLUMN);
+  const viewCountColumn = columnLetterToNumber(config.VIEW_COUNT_COLUMN);
   
   for (const result of results) {
     if (result.success) {
@@ -611,6 +720,59 @@ function continueProcessing() {
 }
 
 /**
+ * Continues processing July 2025 from where the last execution left off
+ */
+function continueJulyProcessing() {
+  updateJuly2025ViewCounts();
+}
+
+/**
+ * Clears the saved progress for July 2025
+ */
+function clearJulyProgress() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  scriptProperties.deleteProperty('JULY_LAST_PROCESSED_ROW');
+  console.log('July 2025 progress cleared. Next execution will start from the beginning.');
+  SpreadsheetApp.getUi().alert('July 2025 progress cleared. Next execution will start from the beginning.');
+}
+
+/**
+ * Gets the current processing status for July 2025
+ */
+function getJulyProcessingStatus() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const lastProcessedRow = scriptProperties.getProperty('JULY_LAST_PROCESSED_ROW');
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('July 2025');
+  
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('July 2025 sheet not found!');
+    return;
+  }
+  
+  const JULY_CONFIG = {
+    ...CONFIG,
+    SHEET_NAME: 'July 2025',
+    URL_COLUMN: 'D',
+    VIEW_COUNT_COLUMN: 'E',
+    START_ROW: 2
+  };
+  
+  const allUrls = scanForTwitterUrlsInSheet(sheet, JULY_CONFIG);
+  
+  if (!lastProcessedRow) {
+    SpreadsheetApp.getUi().alert(`July 2025: No saved progress. Total URLs to process: ${allUrls.length}`);
+  } else {
+    const remaining = allUrls.filter(item => item.row > parseInt(lastProcessedRow)).length;
+    SpreadsheetApp.getUi().alert(
+      `July 2025 Status:\n` +
+      `Last processed row: ${lastProcessedRow}\n` +
+      `Remaining URLs: ${remaining} of ${allUrls.length}\n` +
+      `Progress: ${Math.round(((allUrls.length - remaining) / allUrls.length) * 100)}%`
+    );
+  }
+}
+
+/**
  * Gets the current processing status
  */
 function getProcessingStatus() {
@@ -638,12 +800,20 @@ function getProcessingStatus() {
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Twitter Tools')
-    .addItem('Update View Counts (Process 20)', 'updateTwitterViewCounts')
-    .addItem('Continue Processing', 'continueProcessing')
+    .addItem('Update August 2025 (Process 20)', 'updateTwitterViewCounts')
+    .addItem('Continue August Processing', 'continueProcessing')
+    .addSeparator()
+    .addItem('Update July 2025 (Process 20)', 'updateJuly2025ViewCounts')
+    .addItem('Continue July Processing', 'continueJulyProcessing')
+    .addSeparator()
     .addItem('Update Selected Range', 'updateSelectedRange')
     .addSeparator()
-    .addItem('Check Status', 'getProcessingStatus')
-    .addItem('Clear Progress', 'clearProgress')
+    .addSubMenu(ui.createMenu('Status & Progress')
+      .addItem('August 2025 Status', 'getProcessingStatus')
+      .addItem('July 2025 Status', 'getJulyProcessingStatus')
+      .addSeparator()
+      .addItem('Clear August Progress', 'clearProgress')
+      .addItem('Clear July Progress', 'clearJulyProgress'))
     .addSeparator()
     .addItem('Settings', 'showSettings')
     .addToUi();
