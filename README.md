@@ -74,14 +74,16 @@ A Google Apps Script that automatically fetches Twitter/X.com view counts for UR
 
 ## Configuration
 
-Edit the `CONFIG` object in `Config.gs` to customize:
+### Customizable Settings
+
+The script is **fully customizable** to match your spreadsheet layout! Edit the `CONFIG` object in `Config.gs` to match your specific needs:
 
 ```javascript
 const CONFIG = {
-  SHEET_NAME: 'August 2025',        // Name of the sheet to process
-  URL_COLUMN: 'D',                  // Column containing Twitter URLs
-  VIEW_COUNT_COLUMN: 'E',            // Column to write view counts
-  START_ROW: 2,                      // First data row (skip headers)
+  SHEET_NAME: 'August 2025',        // Change to YOUR sheet name (e.g., 'Data', 'Tweets', etc.)
+  URL_COLUMN: 'D',                  // Change to YOUR column with URLs (e.g., 'A', 'B', 'F', etc.)
+  VIEW_COUNT_COLUMN: 'E',            // Change to YOUR desired output column (e.g., 'B', 'G', etc.)
+  START_ROW: 2,                      // Change if your data starts on a different row
   API_ENDPOINT: 'https://api.twitterapi.io/twitter/tweets',
   API_KEY: 'API_KEY',     // Placeholder - actual key stored in Script Properties
   BATCH_SIZE: 10,                   // URLs to process in each batch
@@ -90,14 +92,35 @@ const CONFIG = {
 };
 ```
 
+### Example Configurations
+
+**Example 1: URLs in column A, view counts in column B**
+```javascript
+SHEET_NAME: 'Twitter Data',
+URL_COLUMN: 'A',
+VIEW_COUNT_COLUMN: 'B',
+```
+
+**Example 2: URLs in column F, view counts in column G, starting from row 5**
+```javascript
+SHEET_NAME: 'Social Media',
+URL_COLUMN: 'F',
+VIEW_COUNT_COLUMN: 'G',
+START_ROW: 5,
+```
+
+**Note:** The current default values (`August 2025`, column `D`, column `E`) are just examples - adapt them to your spreadsheet!
+
 ## Usage
 
 ### Method 1: Menu Interface
 
 1. Open your Google Sheet
 2. Click on **Twitter Tools** in the menu bar
-3. Select **Update View Counts** to process all URLs in the configured column
+3. Select **Update View Counts** to process URLs in your configured column
 4. Or select specific cells and choose **Update View Counts (Selected Range)**
+
+**Note:** The script will process the sheet and columns you've configured in `Config.gs`
 
 ### Method 2: Function Execution
 
