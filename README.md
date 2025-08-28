@@ -1,4 +1,4 @@
-# Twitter View Counter for Google Sheets
+# X/Twitter View Counter for Google Sheets
 
 A Google Apps Script that automatically fetches Twitter/X.com view counts for URLs in your Google Sheets and updates adjacent cells with the data.
 
@@ -26,7 +26,7 @@ A Google Apps Script that automatically fetches Twitter/X.com view counts for UR
 
 1. **Clone or download this repository**
    ```bash
-   git clone https://github.com/joshuadanpeterson/warp-advocacy.git
+   git clone https://github.com/joshuadanpeterson/x-view-counter.git
    ```
 
 2. **Install dependencies** (for local development)
@@ -165,7 +165,7 @@ Duration: 12.34 seconds
 ### Project Structure
 
 ```
-warp-advocacy/
+x-view-counter/
 ├── Config.gs               # Configuration and API key management
 ├── Main.gs                 # Primary orchestration functions
 ├── ApiClient.gs            # Twitter API interactions
