@@ -62,7 +62,7 @@ A Google Apps Script that automatically fetches Twitter/X.com view counts for UR
    - In the Apps Script editor:
      - Click the **gear icon** (Project Settings) in the left sidebar
      - Scroll down to **Script properties**
-     - Click **Add property**
+     - Click **Add script property**
      - Enter:
        - **Property**: `TWITTER_API_KEY`
        - **Value**: Your API key from TwitterAPI.io
