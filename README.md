@@ -10,6 +10,9 @@ A Google Apps Script that automatically fetches Twitter/X.com view counts for UR
 - 📝 **Comprehensive Logging**: Detailed logs for debugging and monitoring
 - 🎨 **Custom Menu Integration**: Easy-to-use menu items in Google Sheets
 - ⚡ **Error Handling**: Graceful error recovery with detailed reporting
+- 🔒 **Secure API Storage**: API keys stored securely in Script Properties
+- 📈 **Cross-Sheet Aggregation**: Custom formula for summing data across sheets
+- 🔄 **Progress Tracking**: Resume capability for interrupted executions
 
 ## Setup
 
@@ -41,7 +44,7 @@ A Google Apps Script that automatically fetches Twitter/X.com view counts for UR
 
 ## Configuration
 
-Edit the `CONFIG` object in `TwitterViewCounter.gs` to customize:
+Edit the `CONFIG` object in `Config.gs` to customize:
 
 ```javascript
 const CONFIG = {
@@ -163,18 +166,28 @@ Duration: 12.34 seconds
 
 ```
 warp-advocacy/
-├── TwitterViewCounter.gs    # Main script file
-├── .clasp.json              # Clasp configuration
+├── Config.gs               # Configuration and API key management
+├── Main.gs                 # Primary orchestration functions
+├── ApiClient.gs            # Twitter API interactions
+├── UrlScanner.gs           # URL detection and validation
+├── Processor.gs            # Batch processing logic
+├── SpreadsheetUpdater.gs   # Sheet update operations
+├── ProgressManagement.gs   # Progress tracking functions
+├── MenuUI.gs               # User interface and menus
+├── Utils.gs                # Utility functions
+├── SheetSumUtilities.gs    # Cross-sheet calculations
+├── .clasp.json             # Clasp configuration
 ├── .claspignore            # Files to ignore during push
 ├── .gitignore              # Git ignore file
 ├── package.json            # Node dependencies
 ├── README.md               # Documentation
+├── WARP.md                 # Detailed project guide
 └── IMPLEMENTATION_STATUS_LOG.md  # Development tracking
 ```
 
 ### Local Development
 
-1. Make changes to `TwitterViewCounter.gs`
+1. Make changes to the relevant `.gs` files
 2. Test locally with `clasp push && clasp open`
 3. View logs with `clasp logs`
 
@@ -188,7 +201,7 @@ warp-advocacy/
 
 ## Security Considerations
 
-- **API Key**: Consider moving the API key to Script Properties for better security
+- **API Key**: Now securely stored in Script Properties (set TWITTER_API_KEY in Project Settings)
 - **Permissions**: The script requires access to:
   - Google Sheets (read/write)
   - External API calls (UrlFetchApp)
@@ -205,6 +218,13 @@ For issues, questions, or suggestions:
 - Contact: Josh Peterson (@jdpeterson)
 
 ## Changelog
+
+### Version 2.0.0 (2025-08-28)
+- Major refactoring: Split monolithic code into modular files
+- Added secure API key management via Script Properties
+- Added cross-sheet aggregation formula (SUM_MONTH_SHEETS)
+- Enhanced rate limiting and progress tracking
+- Improved error handling and recovery
 
 ### Version 1.0.0 (2025-08-22)
 - Initial release
