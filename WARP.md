@@ -50,35 +50,82 @@ clasp run updateTwitterViewCounts --params '[]'
 clasp open
 ```
 
+## Project Structure
+
+The script is organized into modular files for better maintainability:
+
+### Core Files
+- **`Config.gs`** - Configuration settings and API key management
+  - `CONFIG` object with all runtime settings
+  - `getApiKey()` for secure Script Properties retrieval
+
+- **`Main.gs`** - Primary orchestration functions
+  - `updateTwitterViewCounts()` - Main entry point for August 2025
+  - `updateJuly2025ViewCounts()` - Dedicated July 2025 processor
+  - `updateSelectedRange()` - Process user-selected cells
+
+- **`ApiClient.gs`** - Twitter API interactions
+  - `fetchTweetData()` - API calls with rate limiting
+  - `calculateBackoffDelay()` - Exponential backoff logic
+
+### Processing Components
+- **`UrlScanner.gs`** - URL detection and parsing
+  - `scanForTwitterUrls()` - Sheet scanning
+  - `isTwitterUrl()` - URL validation
+  - `extractTweetId()` - Tweet ID extraction
+
+- **`Processor.gs`** - Batch processing logic
+  - `processUrls()` - Main batch processor
+  - `processUrlsWithResume()` - Large dataset handler
+
+- **`SpreadsheetUpdater.gs`** - Sheet update operations
+  - `updateSpreadsheet()` - Cell updates and formatting
+
+### Support Components
+- **`Utils.gs`** - Utility functions
+  - `columnLetterToNumber()` - Column conversion
+  - `logSummary()` - Processing reports
+
+- **`ProgressManagement.gs`** - Progress tracking
+  - Progress clearing and status functions
+  - Resume capability management
+
+- **`MenuUI.gs`** - User interface
+  - `onOpen()` - Menu creation
+  - `showSettings()` - Settings dialog
+
+- **`SheetSumUtilities.gs`** - Cross-sheet calculations
+  - `SUM_MONTH_SHEETS()` - Custom formula for aggregating data
+
 ## Architecture
 
 ### Execution Flow
 
 The script follows this high-level flow:
 
-1. **`updateTwitterViewCounts()`** - Main orchestrator function
+1. **`updateTwitterViewCounts()`** (Main.gs) - Main orchestrator function
    - Retrieves the target sheet from `CONFIG.SHEET_NAME`
    - Initiates URL scanning process
    - Coordinates batch processing
    - Handles error aggregation and reporting
 
-2. **`scanForTwitterUrls(sheet)`** - URL discovery
+2. **`scanForTwitterUrls(sheet)`** (UrlScanner.gs) - URL discovery
    - Reads column specified in `CONFIG.URL_COLUMN`
    - Validates URLs against Twitter/X.com patterns
    - Returns array of `{row, url}` objects for processing
 
-3. **`extractTweetId(url)`** - Tweet ID extraction
+3. **`extractTweetId(url)`** (UrlScanner.gs) - Tweet ID extraction
    - Parses various Twitter URL formats (twitter.com, x.com)
    - Extracts numeric tweet ID from `/status/` path
    - Returns null for invalid formats
 
-4. **`fetchTweetData(tweetId)`** - API integration
+4. **`fetchTweetData(tweetId)`** (ApiClient.gs) - API integration
    - Constructs API request with authentication headers
    - Implements retry logic with exponential backoff
    - Handles rate limiting (429 responses)
    - Returns `{success, viewCount, tweetId}` or error object
 
-5. **`updateSpreadsheet(sheet, results)`** - Data persistence
+5. **`updateSpreadsheet(sheet, results)`** (SpreadsheetUpdater.gs) - Data persistence
    - Batch updates cells in `CONFIG.VIEW_COUNT_COLUMN`
    - Applies number formatting with thousand separators
    - Preserves row associations from scan phase
@@ -94,7 +141,7 @@ The script implements multi-level error handling:
 
 ## Configuration
 
-The `CONFIG` object in `TwitterViewCounter.gs` controls all script behavior:
+The `CONFIG` object in `Config.gs` controls all script behavior:
 
 ```javascript
 const CONFIG = {
@@ -221,7 +268,8 @@ View logs:
 ## Project-Specific Notes
 
 - The script currently processes the "August 2025" sheet by default
-- API key is embedded in code (migration to Script Properties recommended)
+- API key now stored securely via Script Properties (set TWITTER_API_KEY in Project Settings)
 - View counts are formatted with thousand separators automatically
 - Failed URLs are logged but don't interrupt processing
 - The script supports both twitter.com and x.com URL formats
+- Code is modularized into separate files for better maintainability
