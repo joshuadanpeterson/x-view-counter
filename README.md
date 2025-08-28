@@ -20,7 +20,22 @@ A Google Apps Script that automatically fetches Twitter/X.com view counts for UR
 
 1. A Google Sheets document with Twitter/X.com URLs
 2. Access to Google Apps Script
-3. Twitter API credentials (included in script)
+3. API key from TwitterAPI.io (free to sign up - see instructions below)
+
+### Getting an API Key from TwitterAPI.io
+
+1. **Sign up for a free account**
+   - Visit [TwitterAPI.io](https://twitterapi.io)
+   - Click "Get Started" or "Sign Up"
+   - Create your account (no Twitter developer account needed!)
+   - Copy your API key from the dashboard
+
+2. **Why TwitterAPI.io?**
+   - ✅ **No Twitter approval needed** - Start immediately
+   - ✅ **Simple pricing** - $0.15 per 1,000 tweets fetched
+   - ✅ **Real-time data** - Always up-to-date view counts
+   - ✅ **High performance** - 1000+ requests per second
+   - ✅ **Developer-friendly** - RESTful API with clear documentation
 
 ### Installation
 
@@ -39,8 +54,23 @@ A Google Apps Script that automatically fetches Twitter/X.com view counts for UR
    clasp push
    ```
 
-4. **Open your Google Sheet**
+4. **Configure API Key in Google Apps Script** (IMPORTANT!)
+   - Open the Apps Script editor:
+     ```bash
+     npx clasp open
+     ```
+   - In the Apps Script editor:
+     - Click the **gear icon** (Project Settings) in the left sidebar
+     - Scroll down to **Script properties**
+     - Click **Add property**
+     - Enter:
+       - **Property**: `TWITTER_API_KEY`
+       - **Value**: Your API key from TwitterAPI.io
+     - Click **Save script properties**
+
+5. **Open your Google Sheet**
    - The script will automatically create a "Twitter Tools" menu
+   - The API key is now securely stored and will be used automatically
 
 ## Configuration
 
@@ -53,7 +83,7 @@ const CONFIG = {
   VIEW_COUNT_COLUMN: 'E',            // Column to write view counts
   START_ROW: 2,                      // First data row (skip headers)
   API_ENDPOINT: 'https://api.twitterapi.io/twitter/tweets',
-  API_KEY: 'API_KEY',     // Replace with your API key
+  API_KEY: 'API_KEY',     // Placeholder - actual key stored in Script Properties
   BATCH_SIZE: 10,                   // URLs to process in each batch
   MAX_RETRIES: 3,                   // Retry attempts for failed requests
   RETRY_DELAY_MS: 1000              // Delay between retries
@@ -201,11 +231,40 @@ x-view-counter/
 
 ## Security Considerations
 
-- **API Key**: Now securely stored in Script Properties (set TWITTER_API_KEY in Project Settings)
-- **Permissions**: The script requires access to:
-  - Google Sheets (read/write)
-  - External API calls (UrlFetchApp)
-  - UI interactions (custom menus)
+### API Key Security Best Practices
+
+**Never hardcode API keys in your code!** This script uses Google Apps Script's secure Script Properties:
+
+```javascript
+// How the script retrieves the API key securely:
+function getApiKey() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const apiKey = scriptProperties.getProperty('TWITTER_API_KEY');
+  
+  if (!apiKey) {
+    console.warn('API key not found in Script Properties.');
+    // Falls back to placeholder - won't work without proper setup
+    return CONFIG.API_KEY;
+  }
+  
+  return apiKey;
+}
+```
+
+### Benefits of Script Properties:
+- ✅ **Not visible in code** - API keys stay private
+- ✅ **Not in version control** - Safe from Git exposure
+- ✅ **Easy to update** - Change keys without editing code
+- ✅ **Access controlled** - Only script editors can view
+- ✅ **Environment-specific** - Different keys for dev/prod
+
+### Required Permissions
+
+The script requires these permissions:
+- **Google Sheets** - Read/write spreadsheet data
+- **External Requests** - Call TwitterAPI.io endpoints
+- **Script Properties** - Retrieve stored API key
+- **UI Services** - Create custom menus
 
 ## License
 
