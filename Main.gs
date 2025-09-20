@@ -6,17 +6,17 @@
  */
 
 /**
- * Main function to update Twitter view counts for July 2025 sheet
+ * Main function to update Twitter view counts for Sept 2025 sheet
  * Processes column D and outputs to column E
  */
-function updateJuly2025ViewCounts() {
+function updateSept2025ViewCounts() {
   const startTime = new Date();
-  console.log(`[${startTime.toISOString()}] Starting Twitter view count update for July 2025...`);
+  console.log(`[${startTime.toISOString()}] Starting Twitter view count update for Sept 2025...`);
   
-  // Create a custom config for July 2025
-  const JULY_CONFIG = {
+  // Create a custom config for Sept 2025
+  const SEPT_CONFIG = {
     ...CONFIG,
-    SHEET_NAME: 'July 2025',
+    SHEET_NAME: 'Sept 2025',
     URL_COLUMN: 'D',
     VIEW_COUNT_COLUMN: 'E',
     START_ROW: 2
@@ -25,18 +25,18 @@ function updateJuly2025ViewCounts() {
   try {
     // Get the active spreadsheet and target sheet
     const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = spreadsheet.getSheetByName(JULY_CONFIG.SHEET_NAME);
+    const sheet = spreadsheet.getSheetByName(SEPT_CONFIG.SHEET_NAME);
     
     if (!sheet) {
-      throw new Error(`Sheet "${JULY_CONFIG.SHEET_NAME}" not found`);
+      throw new Error(`Sheet "${SEPT_CONFIG.SHEET_NAME}" not found`);
     }
     
     // Check if we're resuming from a previous execution
     const scriptProperties = PropertiesService.getScriptProperties();
-    const lastProcessedRow = parseInt(scriptProperties.getProperty('JULY_LAST_PROCESSED_ROW') || '0');
+    const lastProcessedRow = parseInt(scriptProperties.getProperty('SEPT_LAST_PROCESSED_ROW') || '0');
     
     // Scan for Twitter URLs and process them
-    const allUrlData = scanForTwitterUrlsInSheet(sheet, JULY_CONFIG);
+    const allUrlData = scanForTwitterUrlsInSheet(sheet, SEPT_CONFIG);
     
     // Filter URLs based on last processed row
     const urlData = lastProcessedRow > 0 
@@ -44,42 +44,42 @@ function updateJuly2025ViewCounts() {
       : allUrlData;
     
     // Limit URLs to process in this execution
-    const urlsToProcess = urlData.slice(0, JULY_CONFIG.MAX_URLS_PER_EXECUTION);
+    const urlsToProcess = urlData.slice(0, SEPT_CONFIG.MAX_URLS_PER_EXECUTION);
     
     if (urlsToProcess.length === 0) {
       console.log('No URLs to process. All URLs have been processed.');
-      scriptProperties.deleteProperty('JULY_LAST_PROCESSED_ROW');
-      SpreadsheetApp.getUi().alert('July 2025: All URLs have been processed!');
+      scriptProperties.deleteProperty('SEPT_LAST_PROCESSED_ROW');
+      SpreadsheetApp.getUi().alert('Sept 2025: All URLs have been processed!');
       return;
     }
     
-    console.log(`July 2025: Processing ${urlsToProcess.length} of ${urlData.length} remaining URLs...`);
-    if (urlData.length > JULY_CONFIG.MAX_URLS_PER_EXECUTION) {
-      console.log(`Will process remaining ${urlData.length - JULY_CONFIG.MAX_URLS_PER_EXECUTION} URLs in next execution.`);
+    console.log(`Sept 2025: Processing ${urlsToProcess.length} of ${urlData.length} remaining URLs...`);
+    if (urlData.length > SEPT_CONFIG.MAX_URLS_PER_EXECUTION) {
+      console.log(`Will process remaining ${urlData.length - SEPT_CONFIG.MAX_URLS_PER_EXECUTION} URLs in next execution.`);
     }
     
     const results = processUrls(urlsToProcess);
     
     // Update the spreadsheet with view counts
-    updateSpreadsheetWithConfig(sheet, results, JULY_CONFIG);
+    updateSpreadsheetWithConfig(sheet, results, SEPT_CONFIG);
     
     // Save progress
     if (urlsToProcess.length > 0) {
       const lastRow = Math.max(...urlsToProcess.map(u => u.row));
-      scriptProperties.setProperty('JULY_LAST_PROCESSED_ROW', lastRow.toString());
+      scriptProperties.setProperty('SEPT_LAST_PROCESSED_ROW', lastRow.toString());
       
-      if (urlData.length > JULY_CONFIG.MAX_URLS_PER_EXECUTION) {
+      if (urlData.length > SEPT_CONFIG.MAX_URLS_PER_EXECUTION) {
         console.log(`Progress saved. Last processed row: ${lastRow}`);
         console.log('Run the script again to continue processing remaining URLs.');
         SpreadsheetApp.getUi().alert(
-          `July 2025: Processed ${urlsToProcess.length} URLs.\n` +
-          `${urlData.length - JULY_CONFIG.MAX_URLS_PER_EXECUTION} URLs remaining.\n` +
-          `Use "Continue July Processing" to continue.`
+          `Sept 2025: Processed ${urlsToProcess.length} URLs.\n` +
+          `${urlData.length - SEPT_CONFIG.MAX_URLS_PER_EXECUTION} URLs remaining.\n` +
+          `Use "Continue Sept Processing" to continue.`
         );
       } else {
         // All URLs processed, clear the progress
-        scriptProperties.deleteProperty('JULY_LAST_PROCESSED_ROW');
-        SpreadsheetApp.getUi().alert(`July 2025: Successfully processed all ${urlsToProcess.length} URLs!`);
+        scriptProperties.deleteProperty('SEPT_LAST_PROCESSED_ROW');
+        SpreadsheetApp.getUi().alert(`Sept 2025: Successfully processed all ${urlsToProcess.length} URLs!`);
       }
     }
     
@@ -89,8 +89,8 @@ function updateJuly2025ViewCounts() {
     logSummary(results, duration);
     
   } catch (error) {
-    console.error(`Fatal error in updateJuly2025ViewCounts: ${error.message}`);
-    SpreadsheetApp.getUi().alert(`Error processing July 2025: ${error.message}`);
+    console.error(`Fatal error in updateSept2025ViewCounts: ${error.message}`);
+    SpreadsheetApp.getUi().alert(`Error processing Sept 2025: ${error.message}`);
   }
 }
 
