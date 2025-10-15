@@ -20,7 +20,7 @@
  * Example usage in a cell:
  *   =SUM_MONTH_SHEETS(B5,"(July|August|September) 2025")
  *   =SUM_MONTH_SHEETS(B5,".* 2025")   // all 2025 month sheets
- *   =SUM_MONTH_SHEETS("Twitter","August 2025")  // specific month
+ *   =SUM_MONTH_SHEETS("Twitter","Oct 2025")  // specific month
  */
 function SUM_MONTH_SHEETS(key, pattern) {
   // Create RegExp from the pattern string

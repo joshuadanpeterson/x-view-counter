@@ -80,7 +80,7 @@ The script is **fully customizable** to match your spreadsheet layout! Edit the 
 
 ```javascript
 const CONFIG = {
-  SHEET_NAME: 'August 2025',        // Change to YOUR sheet name (e.g., 'Data', 'Tweets', etc.)
+  SHEET_NAME: 'Oct 2025',        // Change to YOUR sheet name (e.g., 'Data', 'Tweets', etc.)
   URL_COLUMN: 'D',                  // Change to YOUR column with URLs (e.g., 'A', 'B', 'F', etc.)
   VIEW_COUNT_COLUMN: 'E',            // Change to YOUR desired output column (e.g., 'B', 'G', etc.)
   START_ROW: 2,                      // Change if your data starts on a different row
@@ -109,7 +109,7 @@ VIEW_COUNT_COLUMN: 'G',
 START_ROW: 5,
 ```
 
-**Note:** The current default values (`August 2025`, column `D`, column `E`) are just examples - adapt them to your spreadsheet!
+**Note:** The current default values (`Oct 2025`, column `D`, column `E`) are just examples - adapt them to your spreadsheet!
 
 ## Usage
 
