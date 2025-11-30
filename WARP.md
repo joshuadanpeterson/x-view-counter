@@ -60,7 +60,7 @@ The script is organized into modular files for better maintainability:
   - `getApiKey()` for secure Script Properties retrieval
 
 - **`Main.gs`** - Primary orchestration functions
-  - `updateTwitterViewCounts()` - Main entry point for Oct 2025
+  - `updateTwitterViewCounts()` - Main entry point for Nov 2025
   - `updateJuly2025ViewCounts()` - Dedicated July 2025 processor
   - `updateSelectedRange()` - Process user-selected cells
 
@@ -145,7 +145,7 @@ The `CONFIG` object in `Config.gs` controls all script behavior:
 
 ```javascript
 const CONFIG = {
-  SHEET_NAME: 'Oct 2025',        // Exact name of target sheet
+  SHEET_NAME: 'Nov 2025',        // Exact name of target sheet
   URL_COLUMN: 'D',                  // Column containing Twitter URLs (A, B, C, etc.)
   VIEW_COUNT_COLUMN: 'E',           // Column for view count output
   START_ROW: 2,                      // First data row (typically 2 to skip headers)
@@ -267,7 +267,7 @@ View logs:
 
 ## Project-Specific Notes
 
-- The script currently processes the "Oct 2025" sheet by default
+- The script currently processes the "Nov 2025" sheet by default
 - API key now stored securely via Script Properties (set TWITTER_API_KEY in Project Settings)
 - View counts are formatted with thousand separators automatically
 - Failed URLs are logged but don't interrupt processing

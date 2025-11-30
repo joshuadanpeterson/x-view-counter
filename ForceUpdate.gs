@@ -88,12 +88,12 @@ function forceUpdateSept2025ViewCounts() {
 }
 
 /**
- * Force updates ALL Twitter view counts in Oct 2025 sheet
+ * Force updates ALL Twitter view counts in Nov 2025 sheet
  * This will overwrite any existing values in column E
  */
 function forceUpdateAugust2025ViewCounts() {
   const startTime = new Date();
-  console.log(`[${startTime.toISOString()}] Starting FORCE update for Oct 2025...`);
+  console.log(`[${startTime.toISOString()}] Starting FORCE update for Nov 2025...`);
   
   try {
     // Get the active spreadsheet and target sheet
@@ -118,7 +118,7 @@ function forceUpdateAugust2025ViewCounts() {
     
     if (urlsToProcess.length === 0) {
       console.log('No URLs found to process.');
-      SpreadsheetApp.getUi().alert('Oct 2025: No Twitter URLs found in column D');
+      SpreadsheetApp.getUi().alert('Nov 2025: No Twitter URLs found in column D');
       return;
     }
     
@@ -136,13 +136,13 @@ function forceUpdateAugust2025ViewCounts() {
       
       console.log(`Progress saved. Last processed row: ${lastRow}`);
       SpreadsheetApp.getUi().alert(
-        `Oct 2025 FORCE UPDATE:\n` +
+        `Nov 2025 FORCE UPDATE:\n` +
         `Processed ${urlsToProcess.length} URLs.\n` +
         `${allUrlData.length - CONFIG.MAX_URLS_PER_EXECUTION} URLs remaining.\n` +
-        `Use "Continue August Force Update" to continue.`
+        `Use "Continue Nov Force Update" to continue.`
       );
     } else {
-      SpreadsheetApp.getUi().alert(`Oct 2025: Successfully force updated all ${urlsToProcess.length} URLs!`);
+      SpreadsheetApp.getUi().alert(`Nov 2025: Successfully force updated all ${urlsToProcess.length} URLs!`);
     }
     
     // Log summary
@@ -234,7 +234,7 @@ function continueSeptForceUpdate() {
 }
 
 /**
- * Continue force update for Oct 2025
+ * Continue force update for Nov 2025
  */
 function continueAugustForceUpdate() {
   forceUpdateAugust2025ViewCounts();
@@ -253,13 +253,13 @@ function clearSeptForceProgress() {
 }
 
 /**
- * Clear all force update progress for Oct 2025
+ * Clear all force update progress for Nov 2025
  * Use this to start completely fresh
  */
 function clearAugustForceProgress() {
   const scriptProperties = PropertiesService.getScriptProperties();
   scriptProperties.deleteProperty('AUGUST_FORCE_LAST_ROW');
   scriptProperties.deleteProperty('LAST_PROCESSED_ROW');
-  console.log('Oct 2025 force update progress cleared.');
-  SpreadsheetApp.getUi().alert('Oct 2025: Force update progress cleared. Next run will start from the beginning.');
+  console.log('Nov 2025 force update progress cleared.');
+  SpreadsheetApp.getUi().alert('Nov 2025: Force update progress cleared. Next run will start from the beginning.');
 }

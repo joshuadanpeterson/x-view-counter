@@ -18,7 +18,7 @@
  * The script will automatically retrieve the key from Script Properties.
  */
 const CONFIG = {
-  SHEET_NAME: 'Oct 2025',
+  SHEET_NAME: 'Nov 2025',
   URL_COLUMN: 'D',
   VIEW_COUNT_COLUMN: 'E',
   START_ROW: 2,
